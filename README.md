@@ -20,7 +20,7 @@ If you've also bounced off DDIA, maybe this helps.
 
 - **395 nodes** — 1 book → 3 parts → 12 chapters → 54 sections → 127 subsections → 198 concepts
 - **1,255 edges** — structural containment, primary coverage, related concepts, cross-chapter mentions
-- **Every node has a description** — 4–5 sentence chapter summaries, 2–4 sentence concept explanations, section snippets from the book
+- **Every node has a description** — 4–5 sentence chapter summaries and 2–4 sentence concept explanations, all original paraphrasing (the book's text is not included)
 - **Reading-order labels** — concepts are numbered `[Ch.N·NN]`; follow the numbers to read the book in order
 - **Single-file HTML** — no install, no server, just D3 from a CDN
 
@@ -57,10 +57,9 @@ That's it. No build step, no dependencies to install.
 The graph was generated from the DDIA PDF with a small Python script. The approach is reusable for any book with a clean table of contents:
 
 1. Extract the TOC with `pymupdf` — every heading becomes a node.
-2. Pull a short text snippet from each section's pages as a description.
-3. Hand-author a concept library: `(name, description, chapter_id, aliases, related_names)`. ~15–20 concepts per chapter. This is the labor-intensive step, and also the valuable one.
-4. Build edges: containment (book → part → chapter → …), primary (concept → home chapter), related (concept ↔ concept), and mentioned-in (concept → other chapters via alias matching).
-5. Serialize to JSON and inline into the HTML template (see the `<script>` block in `index.html`).
+2. Hand-author a concept library: `(name, description, chapter_id, aliases, related_names)`. ~15–20 concepts per chapter, 2–4 sentence descriptions in your own words. This is the labor-intensive step, and also the valuable one.
+3. Build edges: containment (book → part → chapter → …), primary (concept → home chapter), related (concept ↔ concept), and mentioned-in (concept → other chapters via alias matching).
+4. Serialize to JSON and inline into the HTML template (see the `<script>` block in `index.html`).
 
 Open an issue if you'd like me to extract this into a proper CLI.
 
