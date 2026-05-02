@@ -269,8 +269,56 @@ function selectChapter(num){
   clearFocus();
   applyChapterFilter();
   renderChapList();
-  if(num === null) showDefaultCard();
-  else renderChapterCard(num);
+  if(num === null){
+    showDefaultCard();
+    return;
+  }
+  renderChapterCard(num);
+
+  // Lay out the chapter's concepts as a clean cluster at the center, push
+  // everything else far off-screen, then zoom-to-fit. This way "Ch 6" actually
+  // shows you the Ch 6 sub-graph filling the canvas instead of a scatter.
+  const [W, H] = size();
+  const cx = W/2, cy = H/2;
+  const inCh = nodes.filter(n => n.chapter_number === num);
+  const others = nodes.filter(n => n.chapter_number !== num);
+
+  // Arrange chapter concepts on a ring (or a small grid if there are many).
+  // Node size scales with degree, so a ring radius proportional to count works.
+  const ringR = Math.min(W, H) * 0.32;
+  const N = inCh.length;
+  inCh.forEach((n, i) => {
+    const ang = (i / N) * Math.PI * 2 - Math.PI/2;
+    n.x = n.fx = cx + Math.cos(ang) * ringR;
+    n.y = n.fy = cy + Math.sin(ang) * ringR;
+  });
+  // Park non-chapter nodes far outside the visible area so they don't pull
+  // the chapter cluster around or clutter the view.
+  others.forEach((n, i) => {
+    const ang = (i / others.length) * Math.PI * 2;
+    n.x = n.fx = cx + Math.cos(ang) * 8000;
+    n.y = n.fy = cy + Math.sin(ang) * 8000;
+  });
+  refreshPinnedClasses();
+  sim.alpha(0.5).restart();
+
+  // Fit zoom to the chapter cluster's bounding box (with padding for labels).
+  fitToChapter(num);
+}
+
+// Compute bounding box of the chapter's nodes and zoom/pan to fit.
+function fitToChapter(num, padding=120){
+  const inCh = nodes.filter(n => n.chapter_number === num);
+  if(!inCh.length) return;
+  const xs = inCh.map(n => n.x), ys = inCh.map(n => n.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const w = Math.max(maxX - minX, 100), h = Math.max(maxY - minY, 100);
+  const [W, H] = size();
+  const k = Math.min((W - padding*2) / w, (H - padding*2) / h, 2.4);
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  svg.transition().duration(700).call(zoom.transform,
+    d3.zoomIdentity.translate(W/2 - cx*k, H/2 - cy*k).scale(k));
 }
 
 function applyChapterFilter(){
@@ -502,10 +550,16 @@ document.getElementById('reset').onclick = ()=>{
 function focusNode(id){
   const n = byId.get(id); if(!n) return;
   // Clicking a concept exits any active chapter filter — these are two
-  // different lenses and they shouldn't fight each other.
+  // different lenses and they shouldn't fight each other. Releasing the
+  // chapter's parking pins lets the simulation pull everything back together.
   if(activeChapter !== null){
     activeChapter = null;
     renderChapList();
+    nodes.forEach(d => { d.fx = null; d.fy = null; });
+    refreshPinnedClasses();
+    nodeSel.classed('dim', false);
+    linkSel.classed('dim', false);
+    sim.alpha(0.7).restart();
   }
   const nbrs = (neighbors.get(id) || []);
   const keep = new Set([id, ...nbrs.map(x=>x.other)]);
