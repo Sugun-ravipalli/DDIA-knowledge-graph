@@ -234,7 +234,7 @@ function renderChapList(){
   const all = document.createElement('div');
   all.className = 'chap-row all' + (activeChapter===null ? ' active':'');
   all.innerHTML = `<span class="swatch"></span><span class="name">All chapters</span><span class="count">${ALL_NODES.length}</span>`;
-  all.onclick = () => { activeChapter = null; applyChapterFilter(); renderChapList(); };
+  all.onclick = () => selectChapter(null);
   chapList.appendChild(all);
 
   // Per-chapter rows
@@ -246,9 +246,31 @@ function renderChapList(){
     row.innerHTML = `<span class="swatch" style="background:${chColor(ch.num)}"></span>
       <span class="name">Ch ${ch.num}: ${ch.shortName}</span>
       <span class="count">${count}</span>`;
-    row.onclick = () => { activeChapter = ch.num; applyChapterFilter(); renderChapList(); };
+    row.onclick = () => selectChapter(ch.num);
     chapList.appendChild(row);
   }
+}
+
+// Clear any concept-focus state (highlighted edges, dim from focusNode, zoom).
+function clearFocus(){
+  if(!nodeSel || !linkSel) return;
+  linkSel.classed('hi', false);
+  // Release any pins so layout relaxes back
+  nodes.forEach(d => { d.fx = null; d.fy = null; });
+  refreshPinnedClasses();
+  svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity);
+  sim.alpha(0.5).restart();
+}
+
+// Single entry point for chapter clicks: clear concept focus, apply filter,
+// update sidebar selection, and show a chapter overview in the detail panel.
+function selectChapter(num){
+  activeChapter = num;
+  clearFocus();
+  applyChapterFilter();
+  renderChapList();
+  if(num === null) showDefaultCard();
+  else renderChapterCard(num);
 }
 
 function applyChapterFilter(){
@@ -470,15 +492,8 @@ document.addEventListener('click',(e)=>{
 
 document.getElementById('reset').onclick = ()=>{
   qEl.value='';
-  activeChapter = null;
-  renderChapList();
-  applyChapterFilter();
-  linkSel.classed('hi', false);
-  nodes.forEach(d => { d.fx = null; d.fy = null; });
-  refreshPinnedClasses();
-  svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity);
-  sim.alpha(0.7).restart();
-  showDefaultCard();
+  // selectChapter(null) clears focus, applies "all" filter, resets card and zoom.
+  selectChapter(null);
 };
 
 // ============================================================================
@@ -486,6 +501,12 @@ document.getElementById('reset').onclick = ()=>{
 // ============================================================================
 function focusNode(id){
   const n = byId.get(id); if(!n) return;
+  // Clicking a concept exits any active chapter filter — these are two
+  // different lenses and they shouldn't fight each other.
+  if(activeChapter !== null){
+    activeChapter = null;
+    renderChapList();
+  }
   const nbrs = (neighbors.get(id) || []);
   const keep = new Set([id, ...nbrs.map(x=>x.other)]);
   nodeSel.classed('dim', d => !keep.has(d.id));
@@ -539,6 +560,26 @@ function renderCard(n, nbrs){
   } else {
     parts.push(`<div class="group"><div class="t">Related concepts</div><div class="desc" style="font-size:12.5px;color:var(--mut)">No direct cross-references — this concept stands alone in the graph.</div></div>`);
   }
+  document.getElementById('card').innerHTML = parts.join('');
+}
+
+function renderChapterCard(num){
+  const meta = CH_META.get(num);
+  if(!meta){ showDefaultCard(); return; }
+  const c = chColor(num);
+  const conceptsInCh = ALL_NODES
+    .filter(n => n.chapter_number === num)
+    .sort((a,b) => (a.order||0) - (b.order||0));
+  const parts = [];
+  parts.push(`<h3>Ch ${num}: ${meta.shortName}</h3>`);
+  parts.push(`<div class="chap-badge"><span class="swatch" style="background:${c}"></span>${conceptsInCh.length} concepts in this chapter</div>`);
+  parts.push(`<div class="desc" style="font-size:12.5px;color:var(--mut)">Click any concept below (or in the graph) to see its description and related concepts across the rest of the book.</div>`);
+  parts.push(`<div class="group"><div class="t">Concepts in reading order</div>${
+    conceptsInCh.map(n => `<div class="link" data-id="${n.id}">
+      <span class="swatch" style="background:${c}"></span>
+      <span class="lbl">${n.short_name || n.label}</span>
+    </div>`).join('')
+  }</div>`);
   document.getElementById('card').innerHTML = parts.join('');
 }
 
