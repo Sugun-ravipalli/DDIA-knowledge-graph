@@ -189,18 +189,35 @@ const chColor = (num) => CH_COLORS[(num-1) % CH_COLORS.length] || '#9aa3c0';
 
 const ALL_NODES = GRAPH.nodes.filter(n => n.kind === 'concept');
 const CONCEPT_IDS = new Set(ALL_NODES.map(n => n.id));
+
+// Dedupe related edges: collapse A->B and B->A into a single undirected edge,
+// drop self-loops. Source data has both directions for many pairs, which
+// caused the same neighbor to appear twice in "Related concepts".
+const _seenEdges = new Set();
 const ALL_EDGES = GRAPH.edges
   .filter(e => e.kind === 'related')
-  .filter(e => CONCEPT_IDS.has(e.source) && CONCEPT_IDS.has(e.target));
+  .filter(e => CONCEPT_IDS.has(e.source) && CONCEPT_IDS.has(e.target))
+  .filter(e => e.source !== e.target)
+  .filter(e => {
+    const key = e.source < e.target ? e.source + '|' + e.target : e.target + '|' + e.source;
+    if(_seenEdges.has(key)) return false;
+    _seenEdges.add(key);
+    return true;
+  });
 
 const byId = new Map(ALL_NODES.map(n => [n.id, n]));
-const neighbors = new Map();
+// Build neighbor sets keyed by other-id so each related concept appears once.
+const _neighborSets = new Map();
 ALL_EDGES.forEach(e => {
-  if(!neighbors.has(e.source)) neighbors.set(e.source, []);
-  if(!neighbors.has(e.target)) neighbors.set(e.target, []);
-  neighbors.get(e.source).push({other:e.target, edge:e});
-  neighbors.get(e.target).push({other:e.source, edge:e});
+  if(!_neighborSets.has(e.source)) _neighborSets.set(e.source, new Map());
+  if(!_neighborSets.has(e.target)) _neighborSets.set(e.target, new Map());
+  _neighborSets.get(e.source).set(e.target, e);
+  _neighborSets.get(e.target).set(e.source, e);
 });
+const neighbors = new Map();
+for(const [id, m] of _neighborSets){
+  neighbors.set(id, [...m.entries()].map(([other, edge]) => ({other, edge})));
+}
 
 document.getElementById('stats').textContent =
   `${ALL_NODES.length} concepts · ${ALL_EDGES.length} connections`;
